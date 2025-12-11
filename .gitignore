@@ -1,0 +1,8 @@
+# Ignorar archivos compilados de Python
+__pycache__/
+*.pyc
+
+# Ignorar archivos de sistema o entornos virtuales (por si acaso)
+.DS_Store
+venv/
+.env
