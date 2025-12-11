@@ -5,10 +5,37 @@ from modules.config import CONFIG_HOJAS
 from modules.data import cargar_todo_aura
 from modules.logic import evaluar_cumplimiento_dinamico
 
-# --- CONFIG ---
+# --- CONFIGURACIÓN INICIAL ---
 st.set_page_config(page_title="AURA - Dashboard Integral", page_icon="🧬", layout="wide")
 st.title("🧬 AURA: Análisis Unificado del Ciclo de Vida")
-st.markdown("Dashboard integral: Clasificación de Ciclo de Vida, Auditoría Dinámica y Diagnóstico.")
+
+# --- CSS PERSONALIZADO (MODO COMPACTO) ---
+st.markdown("""
+    <style>
+        /* Reducir espacios verticales generales */
+        .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+        /* Hacer las tarjetas (alertas) más delgadas */
+        div[data-baseweb="alert"] {
+            padding-top: 0.5rem;
+            padding-bottom: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        /* Reducir tamaño de letra de las métricas dentro de las tarjetas */
+        .stMarkdown p {
+            font-size: 0.9rem;
+            margin-bottom: 0px;
+        }
+        /* Reducir espacio de los divisores */
+        hr {
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 
 # --- BOTÓN DE CARGA ---
 if st.button('🔄 Cargar Dashboard AURA Completo'):
@@ -26,49 +53,74 @@ if 'resumen' in st.session_state:
 
     tab_auditoria, tab_ciclo, tab_diag, tab_maestro = st.tabs(["🎯 Auditoría (F2)", "🧬 Ciclo Vida (F1)", "🧠 Diagnóstico (F3)", "📂 Datos Maestros"])
 
-    # TAB 1: AUDITORÍA
+    # ==============================================================================
+    # TAB 1: AUDITORÍA (F2) - 4 COLUMNAS
+    # ==============================================================================
     with tab_auditoria:
-        st.header("Auditoría Individual Dinámica")
         clientes = sorted(df_resumen['Client'].unique())
         cliente_sel = st.selectbox("Auditar Cliente:", clientes)
         
         if cliente_sel:
             row = df_resumen[df_resumen['Client'] == cliente_sel].iloc[0]
             historia_cli = df_hist[df_hist['Client'] == cliente_sel]
-            st.info(f"Estado: {row['Fase_Vida']} | AURA Score: {row['Estado_AURA']}")
             
-            cols = st.columns(4)
-            idx = 0
-            for key, cfg in CONFIG_HOJAS.items():
-                st_msg, det_msg, color, _ = evaluar_cumplimiento_dinamico(row, historia_cli, cfg)
-                with cols[idx % 4]:
-                    st.markdown(f"**{key}**")
-                    val = row[cfg['kpi']]
-                    val_str = f"{val:.1%}" if cfg['is_pct'] else f"{val:.1f}"
-                    if key == 'Transacciones' and 'del Goal' in det_msg:
-                        try:
-                            pct = float(det_msg.split('%')[0]) / 100
-                            st.progress(min(pct, 1.0))
-                        except: pass
-                    
-                    if color == 'success': st.success(f"{val_str}\n\n{st_msg}")
-                    elif color == 'warning': st.warning(f"{val_str}\n\n{st_msg}")
-                    elif color == 'error': st.error(f"{val_str}\n\n{st_msg}")
-                    else: st.info(f"{val_str}\n\n{st_msg}")
-                    st.caption(det_msg)
-                    st.divider()
-                idx += 1
+            # Barra de estado superior
+            st.info(f"Estado: **{row['Fase_Vida']}** | AURA Score: **{row['Estado_AURA']}**")
             
-            st.divider()
-            col_sel, col_graph = st.columns([1, 3])
-            with col_sel:
-                kpi_grafico = st.selectbox("Selecciona KPI:", list(CONFIG_HOJAS.keys()))
-            with col_graph:
-                col_tecnica = CONFIG_HOJAS[kpi_grafico]['kpi']
-                df_plot = df_hist[df_hist['Client'] == cliente_sel][['Date_Obj', col_tecnica]].set_index('Date_Obj').sort_index()
-                st.line_chart(df_plot)
+            # Layout Columnas: Izquierda (KPIs) | Derecha (Gráfica)
+            col_kpis, col_graph = st.columns([3, 2], gap="medium")
 
-    # TAB 2: CICLO VIDA
+            # === COLUMNA IZQUIERDA: TARJETAS ===
+            with col_kpis:
+                st.subheader("Resultados del Mes")
+                
+                with st.container(height=550, border=True):
+                    
+                    # --- CAMBIO AQUÍ: 4 COLUMNAS ---
+                    cols_grid = st.columns(4) 
+                    idx = 0
+                    
+                    for key, cfg in CONFIG_HOJAS.items():
+                        st_msg, det_msg, color, _ = evaluar_cumplimiento_dinamico(row, historia_cli, cfg)
+                        
+                        # Distribuir en las 4 columnas (idx % 4)
+                        with cols_grid[idx % 4]:
+                            st.markdown(f"**{key}**")
+                            
+                            val = row[cfg['kpi']]
+                            val_str = f"{val:.1%}" if cfg['is_pct'] else f"{val:.1f}"
+                            
+                            # Barra de progreso mini
+                            if key == 'Transacciones' and 'del Goal' in det_msg:
+                                try:
+                                    pct = float(det_msg.split('%')[0]) / 100
+                                    st.progress(min(pct, 1.0))
+                                except: pass
+                            
+                            # Tarjeta de color
+                            if color == 'success': st.success(f"{val_str}\n\n{st_msg}")
+                            elif color == 'warning': st.warning(f"{val_str}\n\n{st_msg}")
+                            elif color == 'error': st.error(f"{val_str}\n\n{st_msg}")
+                            else: st.info(f"{val_str}\n\n{st_msg}")
+                            
+                            st.caption(det_msg)
+                            st.divider()
+                        idx += 1
+
+            # === COLUMNA DERECHA: GRÁFICA ===
+            with col_graph:
+                 st.subheader("Tendencia Histórica")
+                 kpi_grafico = st.selectbox("Selecciona KPI:", list(CONFIG_HOJAS.keys()))
+                 
+                 col_tecnica = CONFIG_HOJAS[kpi_grafico]['kpi']
+                 df_plot = df_hist[df_hist['Client'] == cliente_sel][['Date_Obj', col_tecnica]].set_index('Date_Obj').sort_index()
+                 
+                 st.line_chart(df_plot, height=350)
+                 st.caption(f"Visualizando: {CONFIG_HOJAS[kpi_grafico]['desc']}")
+                 st.info("💡 Tip: Usa el scroll en la izquierda para ver más KPIs.")
+
+
+    # TAB 2: CICLO VIDA (Sin cambios)
     with tab_ciclo:
         col1, col2 = st.columns([2, 1])
         conteo = df_resumen['Fase_Vida'].value_counts().reset_index()
@@ -82,7 +134,7 @@ if 'resumen' in st.session_state:
             with st.expander(f"{fase} ({len(clientes_en_fase)} clientes)"):
                 st.write(", ".join(clientes_en_fase))
 
-    # TAB 3: DIAGNÓSTICO
+    # TAB 3: DIAGNÓSTICO (Sin cambios)
     with tab_diag:
         st.header("🧠 Diagnóstico Estratégico")
         fases_activas = ["On Going ✅", "Deployment 🚀", "Adopción 🌱"]
@@ -120,6 +172,6 @@ if 'resumen' in st.session_state:
             if not saludables.empty:
                 st.dataframe(saludables[['Client', 'Fase_Vida']], hide_index=True, use_container_width=True)
 
-    # TAB 4: MAESTRO
+    # TAB 4: MAESTRO (Sin cambios)
     with tab_maestro:
         st.dataframe(df_hist.drop(columns=['Date_Obj']), use_container_width=True)
