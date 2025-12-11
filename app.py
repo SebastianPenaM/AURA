@@ -410,3 +410,5 @@ if 'resumen' in st.session_state:
     with tab_maestro:
         st.header("📂 Datos Maestros")
         st.dataframe(df_hist.drop(columns=['Date_Obj']), use_container_width=True)
+
+#prueba para commit
