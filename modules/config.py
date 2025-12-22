@@ -50,7 +50,7 @@ CONFIG_HOJAS = {
         'goal_col': 'Goal_Asignacion_Pickers',
         'prio_col': 'Prio_Asignacion_Pickers',
         'desc': 'Automatización Picking',
-        'std': 0.10,       # Menos del 10% manual
+        'std': 0.99,       # Menos del 10% manual
         'mayor_mejor': False
     },
     'Asignacion_Drivers': {
@@ -59,7 +59,7 @@ CONFIG_HOJAS = {
         'goal_col': 'Goal_Asignacion_Drivers',
         'prio_col': 'Prio_Asignacion_Drivers',
         'desc': 'Automatización Delivery',
-        'std': 0.10,       # Menos del 10% manual
+        'std': 0.99,       # Menos del 10% manual
         'mayor_mejor': False
     },
     'Ontime': {
@@ -86,7 +86,7 @@ CONFIG_HOJAS = {
         'goal_col': 'Goal_cancelados', 
         'prio_col': 'Prio_cancelados',
         'desc': 'Fricción (Cancelados)',
-        'std': 0.05,       # Máximo tolerable
+        'std': 0.15,       # Máximo tolerable
         'mayor_mejor': False
     },
     'reprogramados': {
@@ -95,9 +95,10 @@ CONFIG_HOJAS = {
         'goal_col': 'Goal_reprogramados', 
         'prio_col': 'Prio_reprogramados',
         'desc': 'Fricción (Reprogramados)',
-        'std': 0.05,       # Máximo tolerable
+        'std': 0.15,       # Máximo tolerable
         'mayor_mejor': False
     },
+    
     'uph': {
         'kpi': 'UPH', 
         'is_pct': False, 
@@ -123,6 +124,15 @@ CONFIG_HOJAS = {
         'prio_col': 'Prio_CIHS',
         'desc': 'Adherencia (Features)',
         'std': 10,         # Uso mínimo de funcionalidades
+        'mayor_mejor': True
+    },
+    'MRR': {
+        'kpi': 'MRR', 
+        'is_pct': False, 
+        'goal_col': 'Goal_MRR',
+        'prio_col': 'Prio_MRR',
+        'desc': 'Ingresos Recurrentes ($)',
+        'std': 0, 
         'mayor_mejor': True
     }
 }

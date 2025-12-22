@@ -33,11 +33,10 @@ def calcular_direccion_tendencia(serie):
     vals = serie.values
     if len(vals) < 2: return 0
     
-    # Tomamos solo los últimos 6 datos para sensibilidad reciente
     y = vals[-6:] 
     x = np.arange(len(y))
     
-    if np.var(y) == 0: return 0 # Línea plana
+    if np.var(y) == 0: return 0 
     slope = np.polyfit(x, y, 1)[0]
     return slope
 
@@ -46,7 +45,6 @@ def calcular_tendencia_trx(serie_trx):
     vals = serie_trx.values
     if len(vals) < 2: return "Estable ↔️"
     
-    # Alerta de caída súbita
     if len(vals) >= 4:
         ultimo = vals[-1]
         promedio = vals[-4:-1].mean()
@@ -68,60 +66,51 @@ def evaluar_cumplimiento_dinamico(row_cliente, df_historia_cliente, kpi_config):
     """
     kpi = kpi_config['kpi']
     goal_col = kpi_config['goal_col']
-    prio_col = kpi_config.get('prio_col', '') # Nombre columna prioridad
+    prio_col = kpi_config.get('prio_col', '') 
     
-    # 1. LEER PRIORIDAD DEL CLIENTE
-    # Si no existe dato, asumimos Prioridad 2 (Importante/Normal)
+    # 1. LEER PRIORIDAD
     try:
-        prioridad = float(row_cliente.get(prio_col, 2))
-        if pd.isna(prioridad): prioridad = 2
+        raw_prio = row_cliente.get(prio_col, 2)
+        prioridad = float(raw_prio) if pd.notna(raw_prio) else 2.0
     except:
-        prioridad = 2 
+        prioridad = 2.0
         
-    # --- CASO ESPECIAL: PRIORIDAD 0 (IRRELEVANTE) ---
-    # Devuelve color 'secondary' (gris) para que la interfaz lo pinte apagado.
+    # --- CASO 0: IRRELEVANTE ---
     if prioridad == 0:
         return "No Aplica ⚪", "Configurado como irrelevante (0)", "secondary", 0
 
-    # 2. CONFIGURACIÓN DEL KPI (Desde config.py)
     mayor_es_mejor = kpi_config.get('mayor_mejor', True)
     estandar_aura = kpi_config.get('std', 0)
     
     val_actual = row_cliente[kpi]
     val_goal = row_cliente.get(goal_col, np.nan)
     
-    # 3. CÁLCULO DE TENDENCIA
+    # Tendencia
     if not df_historia_cliente.empty:
         serie_historia = df_historia_cliente.sort_values('Date_Obj')[kpi]
         pendiente = calcular_direccion_tendencia(serie_historia)
     else:
         pendiente = 0
         
-    # Interpretación de la pendiente según si es bueno subir o bajar
     umb_slope = 0.001
     mejorando = False
     empeorando = False
     
-    if mayor_es_mejor: # Ej: Ventas (Sube=Bien)
+    if mayor_es_mejor:
         if pendiente > umb_slope: mejorando = True
         elif pendiente < -umb_slope: empeorando = True
-    else: # Ej: Cancelados (Baja=Bien)
+    else:
         if pendiente < -umb_slope: mejorando = True
         elif pendiente > umb_slope: empeorando = True
         
     flecha = "↗️" if pendiente > umb_slope else ("↘️" if pendiente < -umb_slope else "↔️")
-
-    # Icono visual para Prioridad 3 (Estrella)
     icono_prio = "🌟 " if prioridad == 3 else ""
 
-    # 4. EVALUACIÓN DE CUMPLIMIENTO
-    
-    # ESCENARIO A: TIENE META DEFINIDA (GOAL)
+    # EVALUACIÓN
+    # A. CON GOAL
     if pd.notna(val_goal) and val_goal != '':
         try:
             val_goal = float(val_goal)
-            
-            # Caso especial Transacciones (es un % de alcance, no un booleano directo)
             if kpi == 'Transacciones':
                 alcance = (val_actual / val_goal) if val_goal > 0 else 0
                 label = f"{alcance:.0%} del Goal"
@@ -130,62 +119,53 @@ def evaluar_cumplimiento_dinamico(row_cliente, df_historia_cliente, kpi_config):
                 cumple = val_actual >= val_goal if mayor_es_mejor else val_actual <= val_goal
                 label = f"Goal: {val_goal}"
 
-            if cumple: 
-                return f"{icono_prio}Meta Cumplida 🎯", f"{label} ({flecha})", "success", 1
+            if cumple: return f"{icono_prio}Meta Cumplida 🎯", f"{label} ({flecha})", "success", 1
             else:
-                # Regla de Oro: Si es Prioridad 3 y falla, es CRITICO (Rojo), aunque mejore.
-                if prioridad == 3:
-                     return f"{icono_prio}CRÍTICO 🚨", f"Fallo en KPI Estrella ({flecha})", "error", -1
+                if prioridad == 3: return f"{icono_prio}CRÍTICO 🚨", f"Fallo KPI Estrella ({flecha})", "error", -1
                 
                 if mejorando: return f"{icono_prio}Recuperando 🌤️", f"No llega, pero mejora {flecha}", "warning", 0
                 elif empeorando: return f"{icono_prio}Crítico 🚨", f"Bajo Goal y empeora {flecha}", "error", -1
                 else: return f"{icono_prio}Estancado ⚠️", f"Bajo Goal estable {flecha}", "warning", -1
         except: pass 
 
-    # ESCENARIO B: NO TIENE META (USA ESTÁNDAR AURA)
-    
-    # Caso especial: Transacciones sin goal depende 100% de la tendencia histórica
+    # B. SIN GOAL
     if kpi == 'Transacciones':
-        tendencia_txt = row_cliente.get('Tendencia_Trx', 'N/A')
-        if "Crecimiento" in tendencia_txt: return f"{icono_prio}{tendencia_txt}", "Positiva", "success", 1
-        elif "Riesgo" in tendencia_txt: 
-            return f"{icono_prio}{tendencia_txt}", "Negativa", "error", -1
-        else: return f"{icono_prio}{tendencia_txt}", "Estable", "off", 0
+        tendencia = row_cliente.get('Tendencia_Trx', 'N/A')
+        if "Crecimiento" in tendencia: return f"{icono_prio}{tendencia}", "Positiva", "success", 1
+        elif "Riesgo" in tendencia: return f"{icono_prio}{tendencia}", "Negativa", "error", -1
+        else: return f"{icono_prio}{tendencia}", "Estable", "off", 0
 
-    # Evaluación contra estándar (config.py)
     cumple = val_actual >= estandar_aura if mayor_es_mejor else val_actual <= estandar_aura
     fmt = f"{estandar_aura:.1%}" if kpi_config['is_pct'] else f"{estandar_aura:.1f}"
     
-    if cumple: 
-        return f"{icono_prio}Estándar OK ✅", f"Std: {fmt} ({flecha})", "success", 1
+    if cumple: return f"{icono_prio}Estándar OK ✅", f"Std: {fmt} ({flecha})", "success", 1
     else:
-         if prioridad == 3: 
-             return f"{icono_prio}CRÍTICO 🚨", f"Fallo Std Estrella ({flecha})", "error", -1
-         
+         if prioridad == 3: return f"{icono_prio}CRÍTICO 🚨", f"Fallo Std Estrella ({flecha})", "error", -1
          if mejorando: return f"{icono_prio}Mejorando 🌤️", f"Fuera std, mejora {flecha}", "warning", 0
          else: return f"{icono_prio}Crítico ⚠️", f"Fuera std, empeora {flecha}", "error", -1
     
-    # Fallback
     return f"Tendencia {flecha}", "Informativo", "off", 0
 
 # ==========================================
-# FASE 3: DIAGNÓSTICO INTEGRAL
+# FASE 3: DIAGNÓSTICO INTEGRAL (ACTUALIZADO)
 # ==========================================
 def generar_diagnostico_cliente(row, df_historia_cliente):
-    """Genera el estado de salud general del cliente basado en sus alertas."""
+    """
+    Genera el estado de salud y la lista de alertas.
+    - Prioridad 0: Se ignora.
+    - Prioridad 3: Si falla, fuerza estado CRÍTICO.
+    """
     alertas = []
+    fallo_estrella = False # Nueva bandera
     
-    # Obtenemos prioridades clave para la lógica de Churn
-    # Usamos .get con default 2 por seguridad
-    trx_prio = float(row.get('Prio_Transacciones', 2)) if pd.notna(row.get('Prio_Transacciones')) else 2
-    dac_prio = float(row.get('Prio_DAC', 2)) if pd.notna(row.get('Prio_DAC')) else 2
+    # Prioridades para lógica Churn específica
+    trx_prio = float(row.get('Prio_Transacciones', 2)) if pd.notna(row.get('Prio_Transacciones')) else 2.0
+    dac_prio = float(row.get('Prio_DAC', 2)) if pd.notna(row.get('Prio_DAC')) else 2.0
     
     for key, cfg in CONFIG_HOJAS.items():
-        # Evaluamos cada KPI
         _, _, color, score = evaluar_cumplimiento_dinamico(row, df_historia_cliente, cfg)
         
-        # FILTRO DE RELEVANCIA:
-        # Si el KPI tiene Prioridad 0 (color 'secondary'), lo ignoramos completamente en las alertas.
+        # 1. FILTRAR IRRELEVANTES (Prioridad 0)
         if color == 'secondary':
             continue
             
@@ -193,27 +173,55 @@ def generar_diagnostico_cliente(row, df_historia_cliente):
         val = row[cfg['kpi']]
         fmt_val = f"{val:.1%}" if cfg['is_pct'] else f"{val:.1f}"
         
-        if score == -1: alertas.append(f"❌ **{key}**: {desc} Crítico ({fmt_val})")
-        elif score == 0: alertas.append(f"⚠️ **{key}**: {desc} Recuperando/Estancado ({fmt_val})")
+        # Obtenemos la prioridad de ESTE kpi actual
+        prio_kpi_col = cfg.get('prio_col', '')
+        try:
+            kpi_prio = float(row.get(prio_kpi_col, 2)) if pd.notna(row.get(prio_kpi_col)) else 2.0
+        except: kpi_prio = 2.0
+
+        # 2. GENERAR ALERTAS
+        if score == -1: 
+            # Si es Estrella (3) y falla, marcamos la bandera de gravedad máxima
+            if kpi_prio == 3:
+                fallo_estrella = True
+                alertas.append(f"🌟❌ **{key} (Estrella)**: {desc} CRÍTICO ({fmt_val})")
+            else:
+                alertas.append(f"❌ **{key}**: {desc} Crítico ({fmt_val})")
+                
+        elif score == 0: 
+            if kpi_prio == 3:
+                alertas.append(f"🌟⚠️ **{key} (Estrella)**: {desc} Recuperando ({fmt_val})")
+            else:
+                alertas.append(f"⚠️ **{key}**: {desc} Recuperando/Estancado ({fmt_val})")
             
     n_alertas_rojas = sum(1 for a in alertas if "❌" in a)
     
-    # Lógica de Diagnóstico Crítico (Churn Risk)
+    # 3. LÓGICA DE ESTADO (Buckets)
+    
+    # Riesgo Churn Clásico (Volumen + Quejas)
+    es_critico_churn = False
+    motivo_critico = ""
+    
     trx_stat = evaluar_cumplimiento_dinamico(row, df_historia_cliente, CONFIG_HOJAS['Transacciones'])
     dac_stat = evaluar_cumplimiento_dinamico(row, df_historia_cliente, CONFIG_HOJAS['DAC'])
     
-    es_critico = False
-    motivo_critico = ""
-    
-    # Solo activamos alarma de Churn si Transacciones y DAC son importantes para este cliente (>0)
     if trx_prio > 0 and dac_prio > 0:
         if trx_stat[3] == -1 and dac_stat[3] == -1:
-            es_critico = True
+            es_critico_churn = True
             motivo_critico = "🚨 ALERTA CHURN: Caída de volumen crítica + Insatisfacción."
 
-    if es_critico: estado = "Crítico / Riesgo"
-    elif n_alertas_rojas >= 3: estado = "Revisión Profunda"
-    elif len(alertas) >= 1: estado = "Atención Operativa"
-    else: estado = "Saludable / Campeón 🏆"
+    # --- REGLAS DE CLASIFICACIÓN FINAL ---
+    if es_critico_churn:
+        estado = "Crítico / Riesgo"
+    elif fallo_estrella: 
+        # Si falla una estrella, es crítico automáticamente
+        estado = "Crítico / Riesgo"
+        if not motivo_critico: motivo_critico = "Fallo en KPI Estrella (Prioridad 3)."
+    elif n_alertas_rojas >= 3: 
+        estado = "Revisión Profunda"
+    elif len(alertas) >= 1: 
+        estado = "Atención Operativa"
+    else: 
+        estado = "Saludable / Campeón 🏆"
     
     return estado, alertas, motivo_critico
