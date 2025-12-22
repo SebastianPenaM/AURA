@@ -175,3 +175,6 @@ if 'resumen' in st.session_state:
     # TAB 4: MAESTRO (Sin cambios)
     with tab_maestro:
         st.dataframe(df_hist.drop(columns=['Date_Obj']), use_container_width=True)
+        
+        
+# prueba cambios  git
