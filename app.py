@@ -9,33 +9,15 @@ from modules.logic import evaluar_cumplimiento_dinamico
 st.set_page_config(page_title="AURA - Dashboard Integral", page_icon="🧬", layout="wide")
 st.title("🧬 AURA: Análisis Unificado del Ciclo de Vida")
 
-# --- CSS PERSONALIZADO (MODO COMPACTO) ---
+# --- CSS PERSONALIZADO ---
 st.markdown("""
     <style>
-        /* Reducir espacios verticales generales */
-        .block-container {
-            padding-top: 2rem;
-            padding-bottom: 2rem;
-        }
-        /* Hacer las tarjetas (alertas) más delgadas */
-        div[data-baseweb="alert"] {
-            padding-top: 0.5rem;
-            padding-bottom: 0.5rem;
-            margin-bottom: 0.5rem;
-        }
-        /* Reducir tamaño de letra de las métricas dentro de las tarjetas */
-        .stMarkdown p {
-            font-size: 0.9rem;
-            margin-bottom: 0px;
-        }
-        /* Reducir espacio de los divisores */
-        hr {
-            margin-top: 0.5rem;
-            margin-bottom: 0.5rem;
-        }
+        .block-container { padding-top: 2rem; padding-bottom: 2rem; }
+        div[data-baseweb="alert"] { padding-top: 0.5rem; padding-bottom: 0.5rem; margin-bottom: 0.5rem; }
+        .stMarkdown p { font-size: 0.9rem; margin-bottom: 0px; }
+        hr { margin-top: 0.5rem; margin-bottom: 0.5rem; }
     </style>
 """, unsafe_allow_html=True)
-
 
 # --- BOTÓN DE CARGA ---
 if st.button('🔄 Cargar Dashboard AURA Completo'):
@@ -45,6 +27,8 @@ if st.button('🔄 Cargar Dashboard AURA Completo'):
             st.session_state['hist'] = hist
             st.session_state['resumen'] = resumen
             st.success("¡Datos actualizados!")
+        else:
+            st.error(logs)
 
 # --- INTERFAZ ---
 if 'resumen' in st.session_state:
@@ -54,7 +38,7 @@ if 'resumen' in st.session_state:
     tab_auditoria, tab_ciclo, tab_diag, tab_maestro = st.tabs(["🎯 Auditoría (F2)", "🧬 Ciclo Vida (F1)", "🧠 Diagnóstico (F3)", "📂 Datos Maestros"])
 
     # ==============================================================================
-    # TAB 1: AUDITORÍA (F2) - 4 COLUMNAS
+    # TAB 1: AUDITORÍA (F2)
     # ==============================================================================
     with tab_auditoria:
         clientes = sorted(df_resumen['Client'].unique())
@@ -64,10 +48,8 @@ if 'resumen' in st.session_state:
             row = df_resumen[df_resumen['Client'] == cliente_sel].iloc[0]
             historia_cli = df_hist[df_hist['Client'] == cliente_sel]
             
-            # Barra de estado superior
             st.info(f"Estado: **{row['Fase_Vida']}** | AURA Score: **{row['Estado_AURA']}**")
             
-            # Layout Columnas: Izquierda (KPIs) | Derecha (Gráfica)
             col_kpis, col_graph = st.columns([3, 2], gap="medium")
 
             # === COLUMNA IZQUIERDA: TARJETAS ===
@@ -75,35 +57,62 @@ if 'resumen' in st.session_state:
                 st.subheader("Resultados del Mes")
                 
                 with st.container(height=550, border=True):
-                    
-                    # --- CAMBIO AQUÍ: 4 COLUMNAS ---
                     cols_grid = st.columns(4) 
                     idx = 0
                     
                     for key, cfg in CONFIG_HOJAS.items():
+                        # 1. LEER PRIORIDAD PARA EL TÍTULO (Manual)
+                        prio_col = cfg.get('prio_col', '')
+                        try:
+                            # Intentamos leer el numero, si falla ponemos 2
+                            raw_prio = row.get(prio_col, 2)
+                            prioridad = float(raw_prio) if pd.notna(raw_prio) else 2.0
+                        except:
+                            prioridad = 2.0
+
+                        # 2. CONSTRUIR TÍTULO PERSONALIZADO
+                        titulo_display = f"**{key}**"
+                        if prioridad == 0:
+                            titulo_display += " <span style='color:grey; font-size:0.8em'>(Irrelevante)</span>"
+                        elif prioridad == 3:
+                            titulo_display += " <span style='color:#FFD700; font-size:0.9em'>🌟 (Estrella)</span>"
+
+                        # 3. EVALUAR LÓGICA
                         st_msg, det_msg, color, _ = evaluar_cumplimiento_dinamico(row, historia_cli, cfg)
                         
-                        # Distribuir en las 4 columnas (idx % 4)
+                        # --- SAFEGUARD: Si prioridad es 0, forzamos color gris ---
+                        if prioridad == 0:
+                            color = 'secondary'
+
+                        # 4. RENDERIZAR EN COLUMNA
                         with cols_grid[idx % 4]:
-                            st.markdown(f"**{key}**")
+                            # Renderizamos título con HTML permitido para los colores del texto
+                            st.markdown(titulo_display, unsafe_allow_html=True)
                             
                             val = row[cfg['kpi']]
                             val_str = f"{val:.1%}" if cfg['is_pct'] else f"{val:.1f}"
                             
-                            # Barra de progreso mini
+                            # Barra progreso mini
                             if key == 'Transacciones' and 'del Goal' in det_msg:
                                 try:
                                     pct = float(det_msg.split('%')[0]) / 100
                                     st.progress(min(pct, 1.0))
                                 except: pass
                             
-                            # Tarjeta de color
-                            if color == 'success': st.success(f"{val_str}\n\n{st_msg}")
+                            # TARJETAS DE COLOR
+                            if color == 'secondary':
+                                # GRIS / IRRELEVANTE (Sin caja de color)
+                                st.markdown(f"<span style='color:grey; font-size: 1.2em; font-weight:bold'>{val_str}</span>", unsafe_allow_html=True)
+                                st.caption(f"⚪ {st_msg}")
+                            
+                            elif color == 'success': st.success(f"{val_str}\n\n{st_msg}")
                             elif color == 'warning': st.warning(f"{val_str}\n\n{st_msg}")
                             elif color == 'error': st.error(f"{val_str}\n\n{st_msg}")
                             else: st.info(f"{val_str}\n\n{st_msg}")
                             
-                            st.caption(det_msg)
+                            if color != 'secondary':
+                                st.caption(det_msg)
+                            
                             st.divider()
                         idx += 1
 
@@ -117,10 +126,9 @@ if 'resumen' in st.session_state:
                  
                  st.line_chart(df_plot, height=350)
                  st.caption(f"Visualizando: {CONFIG_HOJAS[kpi_grafico]['desc']}")
-                 st.info("💡 Tip: Usa el scroll en la izquierda para ver más KPIs.")
 
 
-    # TAB 2: CICLO VIDA (Sin cambios)
+    # TABS RESTANTES (Sin cambios)
     with tab_ciclo:
         col1, col2 = st.columns([2, 1])
         conteo = df_resumen['Fase_Vida'].value_counts().reset_index()
@@ -134,7 +142,6 @@ if 'resumen' in st.session_state:
             with st.expander(f"{fase} ({len(clientes_en_fase)} clientes)"):
                 st.write(", ".join(clientes_en_fase))
 
-    # TAB 3: DIAGNÓSTICO (Sin cambios)
     with tab_diag:
         st.header("🧠 Diagnóstico Estratégico")
         fases_activas = ["On Going ✅", "Deployment 🚀", "Adopción 🌱"]
@@ -172,9 +179,5 @@ if 'resumen' in st.session_state:
             if not saludables.empty:
                 st.dataframe(saludables[['Client', 'Fase_Vida']], hide_index=True, use_container_width=True)
 
-    # TAB 4: MAESTRO (Sin cambios)
     with tab_maestro:
         st.dataframe(df_hist.drop(columns=['Date_Obj']), use_container_width=True)
-        
-        
-# prueba cambios  git
