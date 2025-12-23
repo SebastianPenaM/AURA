@@ -195,8 +195,6 @@ if 'resumen' in st.session_state:
             row = df_resumen[df_resumen['Client'] == cliente_sel].iloc[0]
             historia_cli = df_hist[df_hist['Client'] == cliente_sel]
             meta_info = []
-            if 'Region' in row and row['Region'] != 'Sin Asignar': meta_info.append(f"📍 {row['Region']}")
-            if 'Vertical' in row and row['Vertical'] != 'Sin Asignar': meta_info.append(f"🏢 {row['Vertical']}")
             meta_str = " | ".join(meta_info)
             if meta_str: meta_str = f" | {meta_str}"
             st.info(f"Estado: **{row['Fase_Vida']}** | AURA Score: **{row['Estado_AURA']}**{meta_str}")
